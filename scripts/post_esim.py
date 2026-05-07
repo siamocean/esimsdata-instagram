@@ -388,7 +388,7 @@ def send_telegram_notification(country, operator, today, post_url):
                   json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"}, timeout=15)
 
 def main():
-    print("=== eSIMWay Instagram Bot ===")
+    print("=== eSIMsData Instagram Bot ===")
     day_env = os.environ.get("DAY", "monday").lower()
     template_path = DAY_TEMPLATES.get(day_env, "Monday.png")
     print(f"Day: {day_env} | Template: {template_path}")
