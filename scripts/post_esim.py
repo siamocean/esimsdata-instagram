@@ -6,7 +6,7 @@ from google.oauth2.service_account import Credentials
 from datetime import datetime
 
 TEMPLATE_PATH = "Monday.png"
-SHEET_NAME = "eSIMData.com"
+SHEET_NAME = "eSIMsData.com"
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
 TEXT_COLOR = (255, 255, 255)
 
