@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install requests gspread google-auth pillow numpy
+      - run: pip install requests gspread google-auth pillow numpy cloudinary
       - name: Post to Instagram
         env:
           GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
