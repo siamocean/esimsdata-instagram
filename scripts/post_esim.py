@@ -237,7 +237,7 @@ def get_operator_logo_fandom(operator_name, country_name):
             logo_images = [i for i in images
                           if not any(bad in i['title'].lower() for bad in NOT_LOGO)
                           and not i['title'].lower().endswith(('.svg', '.mp3', '.ogg'))
-                          and not re.match(r'^file:[a-z]{2,3}\.png
+                          and not (len(i['title'].replace('File:', '').replace('.png', '').replace('.jpg', '')) <= 3)]
 
             # Sort: exact operator match first, then others
             exact = [i for i in logo_images if any(w in i['title'].lower() for w in op_words)]
