@@ -238,7 +238,6 @@ def get_operator_logo_fandom(operator_name, country_name):
                           if not any(bad in i['title'].lower() for bad in NOT_LOGO)
                           and not i['title'].lower().endswith(('.svg', '.mp3', '.ogg'))
                           and not (len(i['title'].replace('File:', '').replace('.png', '').replace('.jpg', '')) <= 3)]
-
             # Sort: exact operator match first, then others
             exact = [i for i in logo_images if any(w in i['title'].lower() for w in op_words)]
             fallback = [i for i in logo_images if not any(w in i['title'].lower() for w in op_words)]
@@ -358,6 +357,72 @@ def upload_to_cloudinary(image):
     print(f"Uploaded to Cloudinary: {url}")
     return url
 
+def post_to_buffer(image_url, caption):
+    api_key = os.environ["BUFFER_API_KEY"]
+    channel_id = "6a054385090476fb991a01ef"
+    from datetime import timezone, timedelta
+    # Schedule 2 minutes from now
+    due = (datetime.now(timezone.utc) + timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    create_query = """
+    mutation CreatePost($input: CreatePostInput!) {
+        createPost(input: $input) {
+            ... on PostActionSuccess { post { id text dueAt } }
+            ... on MutationError { message }
+        }
+    }
+    """
+    variables = {
+        "input": {
+            "channelId": channel_id,
+            "text": caption,
+            "schedulingType": "automatic",
+            "mode": "customScheduled",
+            "dueAt": due,
+            "assets": [{"image": {"url": image_url}}],
+            "metadata": {"instagram": {"type": "post", "shouldShareToFeed": True}}
+        }
+    }
+    resp = requests.post(
+        "https://api.buffer.com",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"query": create_query, "variables": variables},
+        timeout=120
+    )
+    data = resp.json()
+    print(f"Buffer create response: {data}")
+    post_data = data.get("data", {}).get("createPost", {})
+    if "post" not in post_data:
+        print(f"Buffer FULL response: {resp.text}")
+        error = post_data.get("message", str(data))
+        raise Exception(f"Buffer error: {error}")
+    buffer_post_id = post_data["post"]["id"]
+    print(f"Buffer post created: {buffer_post_id}, waiting 3 min for publish...")
+    # Wait for Buffer to publish to Instagram
+    time.sleep(180)
+    # Query to get the published Instagram URL
+    get_query = """
+    query GetPost($id: String!) {
+        post(id: $id) {
+            id
+            status
+            serviceLinks { url }
+        }
+    }
+    """
+    resp2 = requests.post(
+        "https://api.buffer.com",
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"query": get_query, "variables": {"id": buffer_post_id}},
+        timeout=30
+    )
+    data2 = resp2.json()
+    print(f"Buffer post status: {data2}")
+    post2 = data2.get("data", {}).get("post", {})
+    links = post2.get("serviceLinks", [])
+    if links:
+        return links[0].get("url", f"https://buffer.com/post/{buffer_post_id}")
+    return f"https://buffer.com/post/{buffer_post_id}"
+
 def post_to_ayrshare(image_url, caption):
     api_key = os.environ["AYRSHARE_API_KEY"]
     resp = requests.post(
@@ -367,14 +432,17 @@ def post_to_ayrshare(image_url, caption):
         timeout=120
     )
     print(f"Ayrshare {resp.status_code}: {resp.text[:200]}")
-    resp.raise_for_status()
-    result = resp.json()
-    post_data = result.get("postIds", [{}])[0]
-    post_url = post_data.get("postUrl", "") or post_data.get("url", "")
-    if not post_url:
-        post_id = post_data.get("id", "")
-        post_url = f"https://www.instagram.com/p/{post_id}/" if post_id else "posted"
+    data = resp.json()
+    post_url = data.get("postIds", [{}])[0].get("postUrl") or data.get("postUrl", "")
     return post_url
+
+def post_to_social(image_url, caption):
+    service = os.environ.get("POSTING_SERVICE", "buffer")
+    if service == "buffer":
+        return post_to_buffer(image_url, caption)
+    else:
+        return post_to_ayrshare(image_url, caption)
+
 
 def send_telegram_notification(country, operator, today, post_url):
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -417,7 +485,7 @@ def main():
     image_url = upload_to_cloudinary(image)
 
     full_caption = caption + "\n\n" + hashtags
-    post_url = post_to_ayrshare(image_url, full_caption)
+    post_url = post_to_social(image_url, full_caption)
 
     today = datetime.now().strftime("%d.%m.%Y")
     update_row_status(sheet, row_index, "\u041e\u043f\u0443\u0431\u043b\u0438\u043a\u043e\u0432\u0430\u043d\u043e", post_url)
